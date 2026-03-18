@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守护者控制台 - 戒烟数据分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- 替换为 Parse SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/parse/3.4.4/parse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f3f4f6; font-family: system-ui, sans-serif; }
+        .glass-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 20px; }
+    </style>
+</head>
+<body class="p-6 text-gray-800 pb-20">
+    <div class="max-w-4xl mx-auto space-y-6">
+        <div class="flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-shield-heart text-blue-500"></i> 守护者数据中心
+            </h1>
+            <div class="space-x-4">
+                <button onclick="fetchCloudData()" class="px-4 py-2 bg-gray-100 rounded-lg font-bold hover:bg-gray-200"><i class="fa-solid fa-rotate mr-1"></i>刷新数据</button>
+                <button onclick="exportCSV()" class="px-4 py-2 bg-blue-500 text-white rounded-lg font-bold shadow-md hover:bg-blue-600"><i class="fa-solid fa-download mr-1"></i>导出数据</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-4">
+            <div class="glass-card text-center">
+                <p class="text-sm text-gray-500 font-bold mb-1">总破戒次数</p>
+                <p class="text-3xl font-bold text-red-500" id="totalSmoke">0</p>
+            </div>
+            <div class="glass-card text-center">
+                <p class="text-sm text-gray-500 font-bold mb-1">总克制次数</p>
+                <p class="text-3xl font-bold text-green-500" id="totalResist">0</p>
+            </div>
+            <div class="glass-card text-center">
+                <p class="text-sm text-gray-500 font-bold mb-1">整体意志胜率</p>
+                <p class="text-3xl font-bold text-blue-500" id="winRate">0%</p>
+            </div>
+            <div class="glass-card text-center">
+                <p class="text-sm text-gray-500 font-bold mb-1">帮TA省下</p>
+                <p class="text-3xl font-bold text-yellow-500">¥<span id="savedMoney">0</span></p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-6">
+            <div class="glass-card">
+                <h3 class="font-bold text-gray-700 mb-4"><i class="fa-solid fa-chart-pie mr-2 text-purple-500"></i>危险期分析 (24小时破戒分布)</h3>
+                <p class="text-xs text-gray-400 mb-2">掌握TA最容易犯烟瘾的时间段，提前给予关心</p>
+                <div class="h-64"><canvas id="dangerChart"></canvas></div>
+            </div>
+
+            <div class="glass-card bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-100">
+                <h3 class="font-bold text-gray-700 mb-4"><i class="fa-solid fa-paper-plane mr-2 text-blue-500"></i>时空信箱 (推送到TA的前台)</h3>
+                <p class="text-xs text-gray-500 mb-4">在此输入想对TA说的话。当TA下一次打开网页，或在网页上点击时，会立刻弹出你的惊喜留言。</p>
+                <textarea id="messageBox" rows="4" class="w-full rounded-xl border-gray-200 p-3 shadow-sm focus:ring-blue-500 outline-none text-sm resize-none" placeholder="例如：刚才看你记录了，是不是很难受？抱抱你~"></textarea>
+                
+                <div class="flex items-center justify-between mt-4">
+                    <div class="flex items-center gap-2 text-sm text-gray-600">
+                        <input type="checkbox" id="isSpecialEgg" class="rounded text-blue-500">
+                        <label for="isSpecialEgg">附带漫天星芒特效 🌸</label>
+                    </div>
+                    <button onclick="pushMessage()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition">发送惊喜弹窗</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ======================= 数据库配置 (Back4App) =======================
+        Parse.initialize(
+            "LlMsqvhth5d5M52n41qI94yCpFYhOwu64gSvuF0V", 
+            "YSBxftBvV4P6XVG7E4DMI1ULGzkiuyPZXNgkTilU"
+        );
+        Parse.serverURL = 'https://parseapi.back4app.com/';
+        // =====================================================================
+
+        let cloudData = { records: [], resistRecords: [] };
+        let dangerChartInstance = null;
+
+        window.onload = () => fetchCloudData();
+
+        async function fetchCloudData() {
+            try {
+                const SmokeData = Parse.Object.extend('SmokeData');
+                const query = new Parse.Query(SmokeData);
+                query.equalTo('userId', 'user_01');
+                const result = await query.first();
+                if (result) {
+                    cloudData = result.get('dataPayload');
+                    renderAdminPanel();
+                }
+            } catch (error) {
+                Swal.fire('获取失败', error.message, 'error');
+            }
+        }
+
+        function renderAdminPanel() {
+            const smk = cloudData.records || [];
+            const rst = cloudData.resistRecords || [];
+            document.getElementById('totalSmoke').innerText = smk.length;
+            document.getElementById('totalResist').innerText = rst.length;
+            const total = smk.length + rst.length;
+            const rate = total === 0 ? 0 : ((rst.length / total) * 100).toFixed(1);
+            document.getElementById('winRate').innerText = rate + '%';
+            document.getElementById('savedMoney').innerText = (rst.length * 1.5).toFixed(1); 
+            renderDangerChart(smk);
+        }
+
+        function renderDangerChart(smk) {
+            const ctx = document.getElementById('dangerChart').getContext('2d');
+            if (dangerChartInstance) dangerChartInstance.destroy();
+            const hours = new Array(24).fill(0);
+            smk.forEach(t => { hours[new Date(t).getHours()]++; });
+            dangerChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: hours.map((_, i) => i + ':00'), datasets: [{ label: '破戒次数', data: hours, backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 4 }] },
+                options: { maintainAspectRatio: false }
+            });
+        }
+
+        async function pushMessage() {
+            const msg = document.getElementById('messageBox').value;
+            const isEgg = document.getElementById('isSpecialEgg').checked;
+            if(!msg) return Swal.fire('提示', '信件内容不能为空哦', 'warning');
+            try {
+                const RemoteMessage = Parse.Object.extend('RemoteMessage');
+                const query = new Parse.Query(RemoteMessage);
+                query.equalTo('userId', 'user_01');
+                let remoteMsg = await query.first();
+                if(!remoteMsg) { remoteMsg = new RemoteMessage(); remoteMsg.set('userId', 'user_01'); }
+                remoteMsg.set('content', msg);
+                remoteMsg.set('withEffect', isEgg);
+                remoteMsg.set('isRead', false); // 未读状态
+                remoteMsg.set('timestamp', Date.now());
+                await remoteMsg.save();
+                Swal.fire('发送成功', '信件已寄出！TA下一次打开网页就能看见。', 'success');
+                document.getElementById('messageBox').value = '';
+            } catch (error) {
+                Swal.fire('发送失败', error.message, 'error');
+            }
+        }
+
+        function exportCSV() {
+            const dataStr = JSON.stringify(cloudData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = '戒烟深度数据.json'; a.click();
+        }
+    </script>
+</body>
+</html>
