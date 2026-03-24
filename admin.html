@@ -2,100 +2,241 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>守护者控制台 - 戒烟数据分析</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TA的数据中心 - 戒烟数据</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- 替换为 Parse SDK -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/parse/3.4.4/parse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #f3f4f6; font-family: system-ui, sans-serif; }
-        .glass-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 20px; }
+        body { background-color: #f3f4f6; font-family: system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 16px; transition: all 0.3s; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="p-6 text-gray-800 pb-20">
-    <div class="max-w-4xl mx-auto space-y-6">
-        <div class="flex justify-between items-center">
-            <h1 class="text-2xl font-bold flex items-center gap-2">
-                <i class="fa-solid fa-shield-heart text-blue-500"></i> 守护者数据中心
+<body class="p-3 md:p-6 text-gray-800 pb-20">
+    <div class="max-w-6xl mx-auto space-y-4 md:space-y-6">
+        <!-- 顶部导航与操作 -->
+        <div class="flex flex-col md:flex-row md:justify-between items-center glass-card py-3 md:py-4 !rounded-2xl bg-white/90 backdrop-blur-md sticky top-2 z-50 shadow-sm border border-gray-100 gap-3">
+            <h1 class="text-lg md:text-2xl font-bold flex items-center gap-2 w-full md:w-auto justify-center md:justify-start">
+                <i class="fa-solid fa-shield-heart text-blue-500"></i> TA的数据中心
             </h1>
-            <div class="space-x-4">
-                <button onclick="fetchCloudData()" class="px-4 py-2 bg-gray-100 rounded-lg font-bold hover:bg-gray-200"><i class="fa-solid fa-rotate mr-1"></i>刷新数据</button>
-                <button onclick="exportCSV()" class="px-4 py-2 bg-blue-500 text-white rounded-lg font-bold shadow-md hover:bg-blue-600"><i class="fa-solid fa-download mr-1"></i>导出数据</button>
+            <div class="flex items-center w-full md:w-auto justify-between md:justify-end">
+                <span id="syncStatus" class="text-xs text-gray-400 mr-3 flex items-center gap-1"><i class="fa-solid fa-cloud-check text-green-500"></i> 实时监控中</span>
+                <button onclick="exportCSV()" class="px-4 py-2 bg-blue-500 text-white rounded-xl font-bold shadow-md hover:bg-blue-600 transition text-sm flex items-center gap-1"><i class="fa-solid fa-download"></i>导出</button>
             </div>
         </div>
 
-        <div class="grid grid-cols-4 gap-4">
-            <div class="glass-card text-center">
-                <p class="text-sm text-gray-500 font-bold mb-1">总破戒次数</p>
-                <p class="text-3xl font-bold text-red-500" id="totalSmoke">0</p>
+        <!-- 核心数据指标 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <div class="glass-card text-center border-b-4 border-red-500">
+                <p class="text-[10px] md:text-xs text-gray-500 font-bold mb-1">总破戒次数</p>
+                <p class="text-2xl md:text-4xl font-black text-red-500" id="totalSmoke">0</p>
             </div>
-            <div class="glass-card text-center">
-                <p class="text-sm text-gray-500 font-bold mb-1">总克制次数</p>
-                <p class="text-3xl font-bold text-green-500" id="totalResist">0</p>
+            <div class="glass-card text-center border-b-4 border-green-500">
+                <p class="text-[10px] md:text-xs text-gray-500 font-bold mb-1">总克制次数</p>
+                <p class="text-2xl md:text-4xl font-black text-green-500" id="totalResist">0</p>
             </div>
-            <div class="glass-card text-center">
-                <p class="text-sm text-gray-500 font-bold mb-1">整体意志胜率</p>
-                <p class="text-3xl font-bold text-blue-500" id="winRate">0%</p>
+            <div class="glass-card text-center border-b-4 border-blue-500">
+                <p class="text-[10px] md:text-xs text-gray-500 font-bold mb-1">意志胜率</p>
+                <p class="text-2xl md:text-4xl font-black text-blue-500" id="winRate">0%</p>
             </div>
-            <div class="glass-card text-center">
-                <p class="text-sm text-gray-500 font-bold mb-1">帮TA省下</p>
-                <p class="text-3xl font-bold text-yellow-500">¥<span id="savedMoney">0</span></p>
+            <div class="glass-card text-center border-b-4 border-yellow-500">
+                <p class="text-[10px] md:text-xs text-gray-500 font-bold mb-1">帮TA省下</p>
+                <p class="text-2xl md:text-4xl font-black text-yellow-500">¥<span id="savedMoney">0</span></p>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-6">
-            <div class="glass-card">
-                <h3 class="font-bold text-gray-700 mb-4"><i class="fa-solid fa-chart-pie mr-2 text-purple-500"></i>危险期分析 (24小时破戒分布)</h3>
-                <p class="text-xs text-gray-400 mb-2">掌握TA最容易犯烟瘾的时间段，提前给予关心</p>
-                <div class="h-64"><canvas id="dangerChart"></canvas></div>
+        <!-- 悬赏契约系统 -->
+        <div class="glass-card border border-yellow-200 bg-gradient-to-br from-yellow-50 to-orange-50 relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 text-yellow-500/10 text-9xl"><i class="fa-solid fa-scroll"></i></div>
+            <h3 class="font-bold text-yellow-800 mb-2 relative z-10"><i class="fa-solid fa-gem text-yellow-500 mr-2"></i>神秘契约发布中心</h3>
+            <p class="text-xs text-yellow-700 mb-4 relative z-10">在此发布悬赏，TA将看到充满高级感的“迷雾成就”，达成条件后解锁你的神秘祝福。</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-2 mb-4 relative z-10">
+                <input type="text" id="cA_name" placeholder="成就名称 (如: 周末勇士)" class="md:col-span-3 border border-yellow-200 rounded-xl p-2.5 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500">
+                <input type="text" id="cA_desc" placeholder="达成后展示的祝福文案" class="md:col-span-4 border border-yellow-200 rounded-xl p-2.5 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500">
+                <select id="cA_type" class="md:col-span-2 border border-yellow-200 rounded-xl p-2.5 text-sm outline-none focus:border-yellow-500">
+                    <option value="reqResist">需克制(次)</option>
+                    <option value="reqGapH">需坚持(小时)</option>
+                    <option value="reqMoney">需省下(元)</option>
+                </select>
+                <input type="number" id="cA_value" placeholder="目标值" class="md:col-span-1 border border-yellow-200 rounded-xl p-2.5 text-sm outline-none focus:border-yellow-500">
+                <button onclick="createCustomAchievement()" class="md:col-span-2 bg-yellow-500 text-white font-bold rounded-xl p-2.5 hover:bg-yellow-600 transition shadow-md active:scale-95 flex justify-center items-center"><i class="fa-solid fa-paper-plane mr-1"></i> 发布契约</button>
             </div>
 
-            <div class="glass-card bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-100">
-                <h3 class="font-bold text-gray-700 mb-4"><i class="fa-solid fa-paper-plane mr-2 text-blue-500"></i>时空信箱 (推送到TA的前台)</h3>
-                <p class="text-xs text-gray-500 mb-4">在此输入想对TA说的话。当TA下一次打开网页，或在网页上点击时，会立刻弹出你的惊喜留言。</p>
-                <textarea id="messageBox" rows="4" class="w-full rounded-xl border-gray-200 p-3 shadow-sm focus:ring-blue-500 outline-none text-sm resize-none" placeholder="例如：刚才看你记录了，是不是很难受？抱抱你~"></textarea>
-                
-                <div class="flex items-center justify-between mt-4">
-                    <div class="flex items-center gap-2 text-sm text-gray-600">
-                        <input type="checkbox" id="isSpecialEgg" class="rounded text-blue-500">
-                        <label for="isSpecialEgg">附带漫天星芒特效 🌸</label>
-                    </div>
-                    <button onclick="pushMessage()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition">发送惊喜弹窗</button>
+            <div class="mt-4 pt-4 border-t border-yellow-200/50 relative z-10">
+                <h4 class="text-xs font-bold text-yellow-800 mb-3 uppercase">进行中 / 已达成的契约</h4>
+                <div id="customAchvList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+            <!-- 危险期分析 -->
+            <div class="glass-card lg:col-span-2">
+                <h3 class="font-bold text-gray-700 mb-3"><i class="fa-solid fa-chart-pie mr-2 text-purple-500"></i>危险期分析 (24h分布)</h3>
+                <div class="h-48 md:h-64"><canvas id="dangerChart"></canvas></div>
+            </div>
+
+            <!-- 历史记录时间线 -->
+            <div class="glass-card flex flex-col">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-700"><i class="fa-solid fa-clock-rotate-left mr-2 text-blue-500"></i>实时足迹</h3>
                 </div>
+                <div class="flex-1 overflow-y-auto no-scrollbar h-48 md:h-64 pr-1 space-y-2" id="timelineList"></div>
             </div>
+        </div>
+
+        <!-- 双向信箱 -->
+        <div class="glass-card bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 flex flex-col h-[400px] md:h-[500px]">
+            <h3 class="font-bold text-indigo-900 mb-2 border-b border-indigo-100 pb-2"><i class="fa-solid fa-envelopes-bulk mr-2 text-indigo-500"></i>时空信箱 (与TA的对话)</h3>
+            <div class="flex-1 overflow-y-auto no-scrollbar p-2 space-y-4" id="mailHistoryList">
+                <div class="text-center text-gray-400 text-[10px] py-10"><i class="fa-solid fa-spinner fa-spin mr-2"></i>拉取对话中...</div>
+            </div>
+            <div class="pt-3 border-t border-indigo-100 mt-2">
+                <div class="flex items-center gap-2 mb-2">
+                    <textarea id="messageBox" rows="1" class="flex-1 rounded-xl border border-indigo-200 p-2.5 shadow-sm focus:ring-2 focus:ring-indigo-400 outline-none text-sm resize-none bg-white" placeholder="写下对TA的鼓励..."></textarea>
+                    <button onclick="pushMessage()" class="px-5 py-2.5 h-full bg-indigo-600 text-white rounded-xl font-bold shadow-md hover:bg-indigo-700 active:scale-95 transition flex items-center justify-center">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+                <label class="flex items-center gap-2 text-xs text-indigo-800 cursor-pointer w-max ml-1">
+                    <input type="checkbox" id="isSpecialEgg" class="rounded text-indigo-500 w-4 h-4"> 附带星芒高级弹窗特效 ✨
+                </label>
+            </div>
+        </div>
+
+        <!-- 危险区 -->
+        <div class="glass-card border border-red-200 bg-red-50 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h3 class="font-bold text-red-700 text-sm md:text-base"><i class="fa-solid fa-triangle-exclamation mr-2"></i>危险操作区</h3>
+                <p class="text-[10px] md:text-xs text-red-500 mt-1">一键清空TA的所有记录、成就与聊天对话。此操作不可逆。</p>
+            </div>
+            <button onclick="resetAllData()" class="w-full md:w-auto px-5 py-2.5 bg-red-600 text-white rounded-xl font-bold shadow-md hover:bg-red-700 transition active:scale-95 text-sm">
+                清空所有数据
+            </button>
         </div>
     </div>
 
     <script>
-        // ======================= 数据库配置 (Back4App) =======================
-        Parse.initialize(
-            "LlMsqvhth5d5M52n41qI94yCpFYhOwu64gSvuF0V", 
-            "YSBxftBvV4P6XVG7E4DMI1ULGzkiuyPZXNgkTilU"
-        );
+        Parse.initialize("LlMsqvhth5d5M52n41qI94yCpFYhOwu64gSvuF0V", "YSBxftBvV4P6XVG7E4DMI1ULGzkiuyPZXNgkTilU");
         Parse.serverURL = 'https://parseapi.back4app.com/';
-        // =====================================================================
+        const USER_ID = 'user_01';
 
-        let cloudData = { records: [], resistRecords: [] };
+        let cloudData = { records: [], resistRecords: [], unlockedAchievements: [], customAchievements: [], eggs: {}, config: { cigPrice: 1.5 } };
         let dangerChartInstance = null;
+        let lastDataHash = "";
+        let lastMailHash = "";
 
-        window.onload = () => fetchCloudData();
+        window.onload = () => { 
+            fetchCloudData(); 
+            loadMailboxHistory(); 
+            // 3秒无感刷新
+            setInterval(fetchCloudData, 3000);
+            setInterval(loadMailboxHistory, 3000);
+            setInterval(checkNewDiaries, 3000);
+        };
+
+        // 简易 Hash 函数，用于判断数据是否发生改变
+        function getHash(obj) { return JSON.stringify(obj); }
 
         async function fetchCloudData() {
             try {
                 const SmokeData = Parse.Object.extend('SmokeData');
                 const query = new Parse.Query(SmokeData);
-                query.equalTo('userId', 'user_01');
+                query.equalTo('userId', USER_ID);
                 const result = await query.first();
                 if (result) {
-                    cloudData = result.get('dataPayload');
-                    renderAdminPanel();
+                    const newData = result.get('dataPayload');
+                    if(!newData.unlockedAchievements) newData.unlockedAchievements = [];
+                    if(!newData.customAchievements) newData.customAchievements = [];
+                    
+                    const currentHash = getHash(newData);
+                    if (currentHash !== lastDataHash) {
+                        cloudData = newData;
+                        renderAdminPanel();
+                        lastDataHash = currentHash;
+                    }
                 }
-            } catch (error) {
-                Swal.fire('获取失败', error.message, 'error');
-            }
+            } catch (error) { console.error("数据拉取失败"); }
+        }
+
+        async function loadMailboxHistory() {
+            try {
+                const Diary = Parse.Object.extend('TreeHoleDiary');
+                const q1 = new Parse.Query(Diary); q1.equalTo('userId', USER_ID); q1.limit(100);
+
+                const RemoteMsg = Parse.Object.extend('RemoteMessage');
+                const q2 = new Parse.Query(RemoteMsg); q2.equalTo('userId', USER_ID); q2.limit(100);
+
+                const [diaries, msgs] = await Promise.all([q1.find(), q2.find()]);
+                
+                let allMails = [];
+                // Admin视角：Diaries是TA发的(收到的), msgs是我发的(发送的)
+                diaries.forEach(d => {
+                    allMails.push({ type: 'received', t: d.get('timestamp') || 0, content: d.get('content') });
+                });
+                msgs.forEach(m => {
+                    allMails.push({ type: 'sent', t: m.get('timestamp') || 0, content: m.get('content'), isRead: m.get('isRead') });
+                });
+                
+                allMails.sort((a,b) => a.t - b.t);
+
+                const currentHash = getHash(allMails);
+                if (currentHash === lastMailHash) return;
+                lastMailHash = currentHash;
+
+                const list = document.getElementById('mailHistoryList');
+                if(allMails.length === 0) { list.innerHTML = '<div class="text-center text-gray-400 text-xs py-10">信箱空空如也</div>'; return; }
+
+                list.innerHTML = allMails.map(m => {
+                    const d = new Date(m.t); const tStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    if(m.type === 'sent') {
+                        return `<div class="flex flex-col items-end mb-4"><span class="text-[9px] text-gray-400 mb-1">${tStr} <span class="${m.isRead?'text-green-500':'text-gray-400'}">${m.isRead?'(TA已读)':'(未读)'}</span></span><div class="bg-indigo-500 text-white p-3 rounded-2xl rounded-tr-sm max-w-[80%] text-sm shadow-sm break-words whitespace-pre-wrap">${m.content}</div></div>`;
+                    } else {
+                        return `<div class="flex flex-col items-start mb-4"><span class="text-[9px] text-gray-400 mb-1">来自TA · ${tStr}</span><div class="bg-white border border-gray-100 text-gray-800 p-3 rounded-2xl rounded-tl-sm max-w-[80%] text-sm shadow-sm relative break-words whitespace-pre-wrap"><i class="fa-solid fa-tree absolute -top-2 -left-2 text-green-500 drop-shadow-sm"></i>${m.content}</div></div>`;
+                    }
+                }).join('');
+                list.scrollTop = list.scrollHeight;
+            } catch (e) {}
+        }
+
+        async function checkNewDiaries() {
+            try {
+                const Diary = Parse.Object.extend('TreeHoleDiary');
+                const q = new Parse.Query(Diary);
+                q.equalTo('userId', USER_ID);
+                q.notEqualTo('isReadAdmin', true);
+                const obj = await q.first();
+                if(obj) {
+                    const content = obj.get('content');
+                    // 标记已读
+                    obj.set('isReadAdmin', true);
+                    await obj.save();
+                    
+                    Swal.fire({
+                        title: '💌 收到TA的心声', text: content, iconHtml: '<i class="fa-solid fa-tree text-green-500 border-none"></i>',
+                        confirmButtonText: '查看', confirmButtonColor: '#4F46E5'
+                    });
+                    
+                    loadMailboxHistory();
+                }
+            } catch (e) {}
+        }
+
+        async function saveToCloud() {
+            try {
+                const SmokeData = Parse.Object.extend('SmokeData');
+                const query = new Parse.Query(SmokeData);
+                query.equalTo('userId', USER_ID);
+                let dbRecord = await query.first();
+                if (!dbRecord) { dbRecord = new SmokeData(); dbRecord.set('userId', USER_ID); }
+                dbRecord.set('dataPayload', cloudData);
+                await dbRecord.save();
+                lastDataHash = getHash(cloudData); // 避免保存后自己的轮询导致重绘
+                renderAdminPanel();
+            } catch (error) { Swal.fire('保存失败', error.message, 'error'); }
         }
 
         function renderAdminPanel() {
@@ -104,10 +245,38 @@
             document.getElementById('totalSmoke').innerText = smk.length;
             document.getElementById('totalResist').innerText = rst.length;
             const total = smk.length + rst.length;
-            const rate = total === 0 ? 0 : ((rst.length / total) * 100).toFixed(1);
-            document.getElementById('winRate').innerText = rate + '%';
-            document.getElementById('savedMoney').innerText = (rst.length * 1.5).toFixed(1); 
+            document.getElementById('winRate').innerText = total === 0 ? '0%' : ((rst.length / total) * 100).toFixed(1) + '%';
+            
+            const cigPrice = cloudData.config?.cigPrice || 1.5;
+            document.getElementById('savedMoney').innerText = (rst.length * cigPrice).toFixed(1); 
+            
             renderDangerChart(smk);
+            renderTimeline(smk, rst);
+            renderCustomAchvs();
+        }
+
+        function renderTimeline(smk, rst) {
+            const list = [...smk.map(t=>({t, type:'smoke'})), ...rst.map(t=>({t, type:'resist'}))].sort((a,b)=>b.t - a.t).slice(0, 30);
+            const container = document.getElementById('timelineList');
+            if(list.length === 0) { container.innerHTML = '<div class="text-center text-gray-400 py-8 text-xs">暂无任何记录</div>'; return; }
+            container.innerHTML = list.map(item => {
+                const d = new Date(item.t);
+                const timeStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                const isSmoke = item.type === 'smoke';
+                return `
+                <div class="flex justify-between items-center p-2 rounded-xl border ${isSmoke ? 'bg-red-50/50 border-red-100' : 'bg-green-50/50 border-green-100'}">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs ${isSmoke ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-500'}">
+                            <i class="fa-solid ${isSmoke ? 'fa-fire-flame-simple' : 'fa-shield'}"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-gray-700">${isSmoke ? '抽了一根' : '成功克制'}</p>
+                            <p class="text-[10px] text-gray-500 font-mono">${timeStr}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteRecord(${item.t}, '${item.type}')" class="text-gray-300 hover:text-red-500 p-1 px-2 transition"><i class="fa-solid fa-trash-can text-sm"></i></button>
+                </div>`;
+            }).join('') + `<div class="text-center text-gray-400 text-[10px] py-2">仅展示最近30条记录</div>`;
         }
 
         function renderDangerChart(smk) {
@@ -116,40 +285,139 @@
             const hours = new Array(24).fill(0);
             smk.forEach(t => { hours[new Date(t).getHours()]++; });
             dangerChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: hours.map((_, i) => i + ':00'), datasets: [{ label: '破戒次数', data: hours, backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 4 }] },
-                options: { maintainAspectRatio: false }
+                type: 'bar', data: { labels: hours.map((_, i) => i + ':00'), datasets: [{ data: hours, backgroundColor: 'rgba(168, 85, 247, 0.7)', borderRadius: 4 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        function createCustomAchievement() {
+            const name = document.getElementById('cA_name').value;
+            const desc = document.getElementById('cA_desc').value;
+            const type = document.getElementById('cA_type').value;
+            const value = parseFloat(document.getElementById('cA_value').value);
+
+            if(!name || !desc || !value) return Swal.fire('提示', '请填写完整信息', 'warning');
+
+            const newAchv = { id: 'c_' + Date.now(), name: name, desc: desc, icon: 'fa-gem' };
+            newAchv[type] = value;
+
+            if(!cloudData.customAchievements) cloudData.customAchievements = [];
+            cloudData.customAchievements.push(newAchv);
+            
+            saveToCloud().then(() => {
+                Swal.fire({title:'发布成功', text:'契约已送达，TA将看到迷雾区', icon:'success', timer: 1500, showConfirmButton: false});
+                document.getElementById('cA_name').value = ''; document.getElementById('cA_desc').value = ''; document.getElementById('cA_value').value = '';
+            });
+        }
+
+        function deleteCustomAchievement(id) {
+            Swal.fire({ title: '撤销该悬赏？', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' }).then(r => {
+                if(r.isConfirmed) { cloudData.customAchievements = cloudData.customAchievements.filter(a => a.id !== id); saveToCloud(); }
+            });
+        }
+
+        function renderCustomAchvs() {
+            const cList = cloudData.customAchievements || [];
+            const container = document.getElementById('customAchvList');
+            if(cList.length === 0) { container.innerHTML = '<div class="text-xs text-yellow-600 col-span-full">当前没有发布的契约。</div>'; return; }
+            container.innerHTML = cList.map(a => {
+                let reqText = a.reqResist ? `忍住 ${a.reqResist} 次` : a.reqGapH ? `坚持 ${a.reqGapH} 小时` : `省下 ${a.reqMoney} 元`;
+                const isUnlocked = (cloudData.unlockedAchievements || []).includes(a.id);
+                return `
+                <div class="bg-white border ${isUnlocked?'border-green-400 bg-green-50/30':'border-yellow-200'} p-3 rounded-xl relative shadow-sm flex justify-between items-center">
+                    <div class="flex-1 min-w-0 pr-2">
+                        <h4 class="text-sm font-bold text-gray-800 truncate">${a.name} ${isUnlocked?'<i class="fa-solid fa-check-circle text-green-500 ml-1"></i>':''}</h4>
+                        <p class="text-[10px] text-gray-500 truncate mt-0.5">${a.desc}</p>
+                        <p class="text-[9px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded inline-block mt-1 font-bold">目标: ${reqText}</p>
+                    </div>
+                    <button onclick="deleteCustomAchievement('${a.id}')" class="text-gray-300 hover:text-red-500 p-2"><i class="fa-solid fa-trash"></i></button>
+                </div>`;
+            }).join('');
+        }
+
+        function deleteRecord(time, type) {
+            Swal.fire({ title: '撤销该记录？', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' }).then(async r => {
+                if(r.isConfirmed) {
+                    if(type === 'smoke') cloudData.records = cloudData.records.filter(t => t !== time);
+                    else cloudData.resistRecords = cloudData.resistRecords.filter(t => t !== time);
+                    await saveToCloud();
+                }
+            });
+        }
+
+        function resetAllData() {
+            Swal.fire({ 
+                title: '清空所有数据？', 
+                text: '不可逆转！这将清空所有记录、成就以及你与TA的聊天历史。', 
+                icon: 'error', 
+                showCancelButton: true, 
+                confirmButtonColor: '#dc2626' 
+            }).then(async r => {
+                if(r.isConfirmed) {
+                    Swal.showLoading();
+                    try {
+                        // 1. 清空基础打卡和成就数据
+                        cloudData.records = []; 
+                        cloudData.resistRecords = []; 
+                        cloudData.unlockedAchievements = []; 
+                        cloudData.customAchievements = [];
+                        await saveToCloud(); 
+
+                        // 2. 清空所有的树洞消息 (TA发来的)
+                        const Diary = Parse.Object.extend('TreeHoleDiary');
+                        const q1 = new Parse.Query(Diary);
+                        q1.equalTo('userId', USER_ID);
+                        q1.limit(1000); // 确保能全删
+                        const diaries = await q1.find();
+                        await Parse.Object.destroyAll(diaries);
+
+                        // 3. 清空所有的远程消息 (我发出的)
+                        const RemoteMsg = Parse.Object.extend('RemoteMessage');
+                        const q2 = new Parse.Query(RemoteMsg);
+                        q2.equalTo('userId', USER_ID);
+                        q2.limit(1000);
+                        const msgs = await q2.find();
+                        await Parse.Object.destroyAll(msgs);
+
+                        // 刷新界面状态
+                        lastMailHash = "";
+                        loadMailboxHistory();
+                        Swal.fire('已清空', '世界安静了，一切归零。', 'success');
+                    } catch(e) {
+                        Swal.fire('清理异常', e.message, 'error');
+                    }
+                }
             });
         }
 
         async function pushMessage() {
-            const msg = document.getElementById('messageBox').value;
+            const msg = document.getElementById('messageBox').value.trim();
             const isEgg = document.getElementById('isSpecialEgg').checked;
-            if(!msg) return Swal.fire('提示', '信件内容不能为空哦', 'warning');
+            if(!msg) return Swal.fire('提示', '写点什么吧', 'warning');
+            
+            const list = document.getElementById('mailHistoryList');
+            list.innerHTML += `<div class="flex justify-end mb-4"><div class="bg-indigo-500 text-white p-3 rounded-2xl rounded-tr-sm max-w-[80%] text-sm shadow-sm break-words whitespace-pre-wrap">${msg}</div></div>`;
+            list.scrollTop = list.scrollHeight;
+            document.getElementById('messageBox').value = '';
+
             try {
                 const RemoteMessage = Parse.Object.extend('RemoteMessage');
-                const query = new Parse.Query(RemoteMessage);
-                query.equalTo('userId', 'user_01');
-                let remoteMsg = await query.first();
-                if(!remoteMsg) { remoteMsg = new RemoteMessage(); remoteMsg.set('userId', 'user_01'); }
-                remoteMsg.set('content', msg);
-                remoteMsg.set('withEffect', isEgg);
-                remoteMsg.set('isRead', false); // 未读状态
+                const remoteMsg = new RemoteMessage();
+                remoteMsg.set('userId', USER_ID);
+                remoteMsg.set('content', msg); 
+                remoteMsg.set('withEffect', isEgg); 
+                remoteMsg.set('isRead', false); 
                 remoteMsg.set('timestamp', Date.now());
                 await remoteMsg.save();
-                Swal.fire('发送成功', '信件已寄出！TA下一次打开网页就能看见。', 'success');
-                document.getElementById('messageBox').value = '';
-            } catch (error) {
-                Swal.fire('发送失败', error.message, 'error');
-            }
+                
+                document.getElementById('isSpecialEgg').checked = false;
+                loadMailboxHistory();
+            } catch (error) { Swal.fire('发送失败', error.message, 'error'); }
         }
 
         function exportCSV() {
-            const dataStr = JSON.stringify(cloudData, null, 2);
-            const blob = new Blob([dataStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = '戒烟深度数据.json'; a.click();
+            const blob = new Blob([JSON.stringify(cloudData, null, 2)], { type: "application/json" });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '戒烟深度数据.json'; a.click();
         }
     </script>
 </body>
